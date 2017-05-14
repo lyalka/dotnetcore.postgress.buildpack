@@ -2,12 +2,14 @@
 # bin/compile <build-dir> <cache-dir>
 
 # fail fast
-set +e
+set -e
+
 
 
 BUILD_DIR=$1
 CACHE_DIR=$2
 ENV_DIR=$3
+
 
 function print() {
   echo "-----> $*"
@@ -24,7 +26,7 @@ function indent() {
 function export_env_dir() {
   local env_dir=$1
   #local whitelist_regex=${2:-'(CORE_VERSION|LIBUV_VERSION|PROJECT|BUILD_DEBUG|CORE_BRANCH|CORE_REL_VERSION)$'}
-  local whitelist_regex=${2:-'(PATH|CORE_VERSION|PROJECT|BUILD_DEBUG|CORE_BRANCH|CORE_REL_VERSION)$'}
+  local whitelist_regex=${2:-'({PORT|PATH|CORE_VERSION|PROJECT|BUILD_DEBUG|CORE_BRANCH|CORE_REL_VERSION)$'}
   local blacklist_regex=${3:-'^(GIT_DIR|CPATH|CPPATH|LD_PRELOAD|LIBRARY_PATH)$'}
   if [ -d "$env_dir" ]; then
     for e in $(ls $env_dir); do
@@ -35,8 +37,11 @@ function export_env_dir() {
   fi
 }
 
+
 LD_DIR=`cd $(dirname $0); cd ..; pwd`
 export_env_dir ${ENV_DIR}
+
+
 
 # Create Cache Directory
 mkdir -p ${CACHE_DIR}
@@ -44,17 +49,20 @@ mkdir -p ${CACHE_DIR}
 # Create Source Directory
 # If you compiled from build dirctory directly then dnu publish throws error due to directory name
 # contains underscore '_'. dnu will not support
-SRC_DIR=`mktemp -d`
-# Move source code into temporary src dir
-(
-    shopt -s dotglob
-    mv ${BUILD_DIR}/* ${SRC_DIR}
-)
+# SRC_DIR=`mktemp -d`
+# # Move source code into temporary src dir
+# (
+    # shopt -s dotglob
+    # mv ${BUILD_DIR}/* ${SRC_DIR}
+# )
+SRC_DIR=${BUILD_DIR}
+
 print "Build Dir Path: ${SRC_DIR}"
+
 
 # Find project file
 PROJECT_FILE=$(find ${SRC_DIR}/. -maxdepth 3 -name "*.csproj")
-printf 'Found %s project.json files\n' $(echo "$PROJECT_FILE" | wc -l | tr -d ' ')
+printf 'Found %s project file\n' $(echo "$PROJECT_FILE" | wc -l | tr -d ' ')
 
 
 #Install DotNet Core
@@ -101,21 +109,21 @@ ln -s ${BUILD_DIR}/dotnet ${HOME}
 export PATH="${HOME}/dotnet:${PATH}"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}"
 
-export DDOTNET_CLI_TELEMETRY_OPTOUT=1
-
-print $PATH
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 print "dotnet restore all dependencies"
 dotnet restore ${PROJECT_FILE} --no-cache
 print "dotnet restore all dependencies completed"
 
-#dotnet pulish using project.json
+
+
 print "dotnet publish starts."
 echo "dotnet publish --output ${BUILD_DIR} --configuration ${CORE_CONFIG} ${PROJECT_FILE} --runtime ${CORE_RUNTIME}"
 dotnet publish --output ${BUILD_DIR} --configuration ${CORE_CONFIG} ${PROJECT_FILE} 
 print "dotnet publish ended."
 
-PROJECT_NAME='Asp2017'
+PROJECT_NAME=$(basename $PROJECT_FILE .csproj)
+
 print "${PROJECT_NAME}.dll has been created."
 
 mkdir -p ${BUILD_DIR}/.profile.d
@@ -126,8 +134,11 @@ export LIBRARY_PATH="\$HOME/.apt/usr/lib/x86_64-linux-gnu:\$HOME/.apt/usr/lib/i3
 export INCLUDE_PATH="\$HOME/.apt/usr/include:\$INCLUDE_PATH"
 export CPATH="\$INCLUDE_PATH"
 export CPPPATH="\$INCLUDE_PATH"
+export ASPNETCORE_URLS="http://*:\$PORT"
 export PKG_CONFIG_PATH="\$HOME/.apt/usr/lib/x86_64-linux-gnu/pkgconfig:\$HOME/.apt/usr/lib/i386-linux-gnu/pkgconfig:\$HOME/.apt/usr/lib/pkgconfig:\$PKG_CONFIG_PATH"
 EOF
+
+cat ${BUILD_DIR}/.profile.d/000_apt.sh
 
 print "Procfile setting"
 cat <<EOF >${BUILD_DIR}/Procfile
