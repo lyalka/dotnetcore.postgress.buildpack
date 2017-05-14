@@ -2,21 +2,12 @@
 # bin/compile <build-dir> <cache-dir>
 
 # fail fast
-set -e
+set +e
 
-if [ $STACK != "cedar-14" ]; then
-	echo "Stack ${STACK} not supported" && exit 1
-fi
 
 BUILD_DIR=$1
 CACHE_DIR=$2
 ENV_DIR=$3
-#: ${LIBUV_VERSION:="1.8.0"}
-: ${CORE_BRANCH:="Sdk"}
-: ${CORE_REL_VERSION:="rel-1.0.0"}
-: ${CORE_VERSION:="latest"}
-: ${CORE_RUNTIME:="Active"}
-: ${NODE_VERSION:="6.3.1"}
 
 function print() {
   echo "-----> $*"
@@ -33,8 +24,8 @@ function indent() {
 function export_env_dir() {
   local env_dir=$1
   #local whitelist_regex=${2:-'(CORE_VERSION|LIBUV_VERSION|PROJECT|BUILD_DEBUG|CORE_BRANCH|CORE_REL_VERSION)$'}
-  local whitelist_regex=${2:-'(CORE_VERSION|PROJECT|BUILD_DEBUG|CORE_BRANCH|CORE_REL_VERSION)$'}
-  local blacklist_regex=${3:-'^(PATH|GIT_DIR|CPATH|CPPATH|LD_PRELOAD|LIBRARY_PATH)$'}
+  local whitelist_regex=${2:-'(PATH|CORE_VERSION|PROJECT|BUILD_DEBUG|CORE_BRANCH|CORE_REL_VERSION)$'}
+  local blacklist_regex=${3:-'^(GIT_DIR|CPATH|CPPATH|LD_PRELOAD|LIBRARY_PATH)$'}
   if [ -d "$env_dir" ]; then
     for e in $(ls $env_dir); do
       echo "$e" | grep -E "$whitelist_regex" | grep -qvE "$blacklist_regex" &&
@@ -61,32 +52,14 @@ SRC_DIR=`mktemp -d`
 )
 print "Build Dir Path: ${SRC_DIR}"
 
-# Find project.json
-PROJECT_JSON_FILES=$(find ${SRC_DIR}/. -maxdepth 3 -iname "project.json")
-printf 'Found %s project.json files\n' $(echo "$PROJECT_JSON_FILES" | wc -l | tr -d ' ')
-PROJECT_JSON_FILE=$(echo "$PROJECT_JSON_FILES" | head -1)
+# Find project file
+PROJECT_FILE=$(find ${SRC_DIR}/. -maxdepth 3 -name "*.csproj")
+printf 'Found %s project.json files\n' $(echo "$PROJECT_FILE" | wc -l | tr -d ' ')
+
 
 #Install DotNet Core
-NETCORE_VERSION=$(grep -Po '"'"version"'"\s*:\s*"\K([^"]*)'  ${PROJECT_JSON_FILE} | head -1)
-print "${NETCORE_VERSION}"
-if [ -z "${NETCORE_VERSION}" ]; then
-        CORE_BRANCH="preview"
-elif [[ "${NETCORE_VERSION}" != "latest" ]]; then
- 	if [[ "${NETCORE_VERSION}" == *"1.0.0"* ]]; then
-		CORE_DWLD_URL="https://dotnetcli.blob.core.windows.net/dotnet/preview/Binaries/1.0.0-preview2-003121/dotnet-dev-ubuntu-x64.1.0.0-preview2-003121.tar.gz"	
-	elif [[ "${NETCORE_VERSION}" == *"1.0.1"* ]]; then
-		CORE_DWLD_URL="https://dotnetcli.blob.core.windows.net/dotnet/preview/Binaries/1.0.0-preview2-003131/dotnet-dev-ubuntu-x64.1.0.0-preview2-003131.tar.gz"
-	else
-		CORE_DWLD_URL="https://download.microsoft.com/download/8/C/9/8C9182C7-9DCD-40C1-B72A-BEC4C3FC1FC1/dotnet-dev-ubuntu-x64.1.0.0-preview2.1-003155.tar.gz"
-		#CORE_DWLD_URL="https://dotnetcli.blob.core.windows.net/dotnet/preview/Binaries/1.0.0-preview2.1-003155/dotnet-dev-ubuntu-x64.1.0.0-preview2.1-003155.tar.gz"
-	fi
-fi
 
-if [ -z "${CORE_DWLD_URL}" ]; then
-        CORE_DWLD_URL="https://dotnetcli.blob.core.windows.net/dotnet/preview/Binaries/Latest/dotnet-dev-ubuntu-x64.${CORE_VERSION}.tar.gz"
-	#CORE_DWLD_URL="https://dotnetcli.blob.core.windows.net/dotnet/${CORE_BRANCH}/Binaries/Latest/dotnet-dev-ubuntu-x64.${CORE_VERSION}.tar.gz"
-	#CORE_DWLD_URL="https://dotnetcli.blob.core.windows.net/dotnet/${CORE_BRANCH}/${CORE_REL_VERSION}/dotnet-dev-ubuntu-x64.${CORE_VERSION}.tar.gz"
-fi
+CORE_DWLD_URL='https://go.microsoft.com/fwlink/?linkid=848826'
 
 if [ -n "$BUILD_DEBUG" ]; then
 	CORE_CONFIG="Debug"
@@ -128,17 +101,21 @@ ln -s ${BUILD_DIR}/dotnet ${HOME}
 export PATH="${HOME}/dotnet:${PATH}"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}"
 
+export DDOTNET_CLI_TELEMETRY_OPTOUT=1
+
+print $PATH
+
 print "dotnet restore all dependencies"
-dotnet restore ${PROJECT_JSON_FILE} --no-cache
+dotnet restore ${PROJECT_FILE} --no-cache
 print "dotnet restore all dependencies completed"
 
 #dotnet pulish using project.json
 print "dotnet publish starts."
-echo "dotnet publish --output ${BUILD_DIR} --configuration ${CORE_CONFIG} ${PROJECT_JSON_FILE} --runtime ${CORE_RUNTIME}"
-dotnet publish --output ${BUILD_DIR} --configuration ${CORE_CONFIG} ${PROJECT_JSON_FILE} --runtime ${CORE_RUNTIME}
+echo "dotnet publish --output ${BUILD_DIR} --configuration ${CORE_CONFIG} ${PROJECT_FILE} --runtime ${CORE_RUNTIME}"
+dotnet publish --output ${BUILD_DIR} --configuration ${CORE_CONFIG} ${PROJECT_FILE} 
 print "dotnet publish ended."
 
-PROJECT_NAME=$(grep -Po '"'"outputName"'"\s*:\s*"\K([^"]*)'  ${PROJECT_JSON_FILE})
+PROJECT_NAME='Asp2017'
 print "${PROJECT_NAME}.dll has been created."
 
 mkdir -p ${BUILD_DIR}/.profile.d
@@ -154,5 +131,5 @@ EOF
 
 print "Procfile setting"
 cat <<EOF >${BUILD_DIR}/Procfile
-web: dotnet ${HOME}/${PROJECT_NAME}.dll http://0.0.0.0:\$PORT ${CORE_ENV}
+web: dotnet ${HOME}/${PROJECT_NAME}.dll
 EOF

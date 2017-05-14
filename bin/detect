@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 # bin/detect <build-dir>
 
-if [ -n "$( find $1 -maxdepth 3 -iname project.json )" ]; then
-  echo "ASP.NET 5" && exit 0
+#Check if .csproj file exists
+export projFile="$(find $1 -maxdepth 3  -name *.csproj)"
+
+if [[ ! -z $projFile ]]; then
+
+	#extract TargetFramework value
+	export targetFramework="$(sed -n -e 's/.*<TargetFramework>\(.*\)<\/TargetFramework>.*/\1/p' $projFile)"   
+		
+	#currently support only 1.1. can be changed to other regexp e.g netcoreapp1[.][123] will match 1.1, 1.2 and 1.3 versions
+	if [[ $targetFramework =~ netcoreapp1[.][1] ]]; then
+		echo $targetFramework && exit 0
+	else
+		echo "no" && exit 1
+	fi
 else
-  echo "no" && exit 1
+	echo "no" && exit 1
 fi
